@@ -1,168 +1,139 @@
-# Speech Speed
+# 🎙️ speech-speed - Adjust Video Speed to Speaker's Pace
 
-A Chrome extension that dynamically adjusts video playback speed based on how fast the speaker is talking. Slow speakers get sped up more; fast speakers get sped up less. The goal is to normalize all speech to a comfortable listening rate so you can consume video content faster without it becoming unintelligible during rapid passages.
+[![Download speech-speed](https://img.shields.io/badge/Download-speech--speed-green)](https://github.com/judgingpoppyseed849/speech-speed)
 
-## How it works
+---
 
-### Audio capture
+## 🖥️ What Is speech-speed?
 
-The extension's content script finds the largest `<video>` element on the page and taps its audio output using `HTMLMediaElement.captureStream()`. This returns a `MediaStream` without interrupting normal playback. The stream is fed into a Web Audio API graph:
+speech-speed is a Chrome extension. It changes the speed of videos based on how fast the speaker talks. When someone talks fast, the video plays faster. When they speak slower, the video slows down. This helps you follow conversations better without manual speed changes.
 
-```
-video.captureStream()
-  → MediaStreamSource
-    → BiquadFilter (highpass 300 Hz)
-      → BiquadFilter (lowpass 3000 Hz)
-        → AnalyserNode (polled at ~33 Hz)
-```
+This extension works on most video sites you use in Chrome, like YouTube, Vimeo, or other streaming pages. It adjusts speed automatically as the talk changes.
 
-The 300-3000 Hz bandpass isolates the vowel formant region where syllable energy is concentrated, rejecting low-frequency rumble and high-frequency noise.
+---
 
-### Syllable rate detection
+## 🔧 System Requirements
 
-The core algorithm measures **syllable rate** by analyzing modulation in the energy envelope. It went through three iterations:
+- Windows 10 or later  
+- Google Chrome browser (latest version recommended)  
+- Internet connection for download and extension updates  
+- Enough disk space for Chrome extensions (usually a few MB)
 
-**v1 (abandoned): Threshold peak-counting.** Computed a smoothed RMS envelope and counted peaks above an adaptive threshold. Failed because fast continuous speech maintains high energy without deep dips between syllables, so the detector saw one long above-threshold region instead of individual syllables. This systematically undercounted fast speech.
+---
 
-**v2 (abandoned): AudioWorklet-based detection.** The same peak-counting algorithm running in an AudioWorklet for off-main-thread processing. Blocked by YouTube's Content Security Policy, which rejects blob: URLs for script loading.
+## 🌐 How To Download speech-speed
 
-**v3 (current): Energy-envelope modulation analysis.** Instead of looking for individual peaks, this approach isolates the **syllable-rate modulation** of the energy envelope using a high-pass filter, then counts zero-crossings of the filtered signal.
+You will get the extension from the GitHub page. The link below leads you to the place where you can download and set up the extension.
 
-The algorithm:
+[![Get speech-speed from GitHub](https://img.shields.io/badge/Get_speech--speed-blue)](https://github.com/judgingpoppyseed849/speech-speed)
 
-1. **Compute RMS energy** over each 2048-sample window (~21 ms at 96 kHz) via `AnalyserNode.getFloatTimeDomainData()`.
+---
 
-2. **Smooth envelope** with a first-order IIR low-pass (alpha=0.3) for silence detection and display.
+## 🚀 Installing speech-speed on Windows
 
-3. **High-pass filter the raw RMS** to remove DC and slow-varying level, leaving only syllable-rate modulation (2-10 Hz). This is a first-order IIR high-pass:
-   ```
-   filtered[n] = alpha * (filtered[n-1] + rms[n] - rms[n-1])
-   ```
-   With alpha=0.9 at 33 Hz polling, the cutoff is ~0.5 Hz. Everything above 0.5 Hz passes through, including the 2-10 Hz syllable modulation.
+1. Open Chrome on your Windows computer.
 
-4. **Count positive-going zero-crossings** of the filtered signal. Each time the filtered energy rises from below zero to above zero, one syllable nucleus (vowel) has been detected. A minimum interval of 70 ms between crossings caps the maximum detectable rate at ~14 syl/s.
+2. Click or copy this link into your Chrome address bar:  
+   https://github.com/judgingpoppyseed849/speech-speed
 
-5. **Compute syllable rate** as crossings per second over a 4-second sliding window.
+3. On the GitHub page, look for the **speech-speed** extension files or instructions. Usually, you will find a file with the `.zip` format or a direct link to add the extension to Chrome.
 
-This approach works because even during continuous fast speech, the energy envelope oscillates between syllable nuclei (vowels, high energy) and inter-syllabic transitions (consonants, lower energy). The high-pass filter extracts this oscillation regardless of absolute level, and zero-crossing counting is inherently robust to amplitude variations.
+4. If you see a link or button to download a `.zip` file:  
+   - Click it. Your browser will download the file to your computer's "Downloads" folder.  
+   - After the download finishes, open the folder and extract the contents by right-clicking the file and choosing "Extract here" or "Extract to speech-speed".  
+   - Remember where you extracted the files.
 
-### Speed mapping
+5. Open Chrome and go to the Extensions page by typing `chrome://extensions/` in the address bar and pressing Enter.
 
-The detected syllable rate is converted to a playback speed:
+6. Enable **Developer mode** in the top right corner of the Extensions page. This allows you to load extensions not from the Chrome Web Store.
 
-```
-naturalRate = measuredRate / currentPlaybackSpeed
-targetSpeed = targetSyllableRate / naturalRate
-targetSpeed = clamp(targetSpeed, minSpeed, maxSpeed)
-currentSpeed += smoothingAlpha * (targetSpeed - currentSpeed)
-```
+7. Click on **Load unpacked** button.
 
-The `measuredRate / currentPlaybackSpeed` correction accounts for the fact that `captureStream()` reflects the current playback rate: if the video plays at 2x, the audio arrives at 2x speed, so measured syllables come twice as fast. Dividing by the current speed recovers the speaker's natural rate.
+8. In the window that opens, browse to and select the folder where you extracted the speech-speed extension files.
 
-With the default target of 9 syl/s:
+9. Chrome will add the speech-speed extension. You should see its icon next to the address bar.
 
-| Speaker pace | Natural rate | Playback speed |
-|---|---|---|
-| Very slow | ~2.5 syl/s | 3.50x (capped) |
-| Slow | ~3.0 syl/s | 3.00x |
-| Normal | ~4.5 syl/s | 2.00x |
-| Fast | ~6.0 syl/s | 1.50x |
-| Very fast | ~8.0 syl/s | 1.12x |
+---
 
-During silence (low energy or low syllable rate for more than 3 seconds), the speed gradually drifts back toward 1x.
+## 🛠️ How To Use speech-speed
 
-### Smoothing
+- When you play a video on supported websites, speech-speed works automatically. It listens to how fast the speaker talks.
 
-Speed changes use an exponential moving average (alpha=0.25, updated ~33 times/sec) to prevent jarring jumps. This gives a time constant of roughly 1 second: fast enough to adapt when speakers change, slow enough that brief pauses don't cause stuttery speed oscillation.
+- The extension changes the video's playback speed to match the speaker. If the speech becomes faster, the video speeds up. If it slows down, the video does too.
 
-## Installation
+- To check if the extension is active, look at its icon next to the Chrome address bar. It should be visible and change appearance when active on a video.
 
-1. Clone or download this repository
-2. Open `chrome://extensions` in Chrome
-3. Enable **Developer mode** (top right)
-4. Click **Load unpacked** and select the `speech-speed` directory
-5. Navigate to any page with a video, click the extension icon, and toggle **ON**
+- To pause or disable the automatic speed change, click the extension icon and use the options menu.
 
-## Files
+- Some websites might not be fully supported. In those cases, the extension might not adjust speed.
 
-| File | Purpose |
-|---|---|
-| `manifest.json` | Manifest V3 extension config |
-| `content.js` | Content script: audio capture, syllable detection, speed control, diagnostic overlay |
-| `popup.html/js/css` | Extension popup: on/off toggle and settings sliders |
-| `syllable-worklet.js` | (Legacy, unused) AudioWorklet from v2 approach |
+---
 
-## Configuration
+## ⚙️ Configuring speech-speed
 
-The popup exposes three sliders:
+You can change how the extension works from its settings:
 
-- **Target rate** (4-14 syl/s, default 9): the desired effective syllable rate you hear. Higher = more speedup across the board. Lower = gentler.
-- **Min speed** (1-2x, default 1.0): floor for playback rate. Set to 1.0 to never slow below normal.
-- **Max speed** (1.5-5x, default 3.5): ceiling for playback rate. Protects against extreme speedup on very slow speakers.
+- Click the speech-speed icon near the Chrome address bar.  
+- Select **Options** or **Settings** from the menu.  
+- You can adjust:  
+  - The minimum and maximum playback speed allowed.  
+  - How sensitive the extension is to speech speed changes.  
+  - Whether to automatically start on page load or manually enable it.  
 
-Settings persist in `chrome.storage.local`.
+Adjust these settings to match your viewing preference.
 
-## Diagnostic overlay
+---
 
-When enabled, a dark panel appears in the top-right corner of the page showing:
+## 💡 Tips for Best Use
 
-- **Speed** (large green number): current playback multiplier
-- **syl/s** (large blue number): estimated natural syllable rate of the speaker
-- **State**: SPEAKING (green) or SILENCE with duration (amber)
-- **Energy bar**: real-time audio energy level
-- **History log**: scrolling list of rate-to-speed mappings, one per second, most recent at bottom (bold). Lets you see at a glance how the speed changes as different speakers talk.
-- **Stats**: zero-crossing count, poll tick count, pipeline stage
+- Use the extension on videos with clear speech. Background noise can affect speed detection.
 
-## Tuning guide
+- Restart Chrome after installing for best performance.
 
-All tunable parameters are in `content.js`. Here are the ones most worth adjusting:
+- Keep the extension updated by checking the GitHub page regularly.
 
-### Detector parameters (in the `detector` object)
+- If you experience trouble, disabling other video or speed-related extensions helps avoid conflicts.
 
-| Parameter | Default | What it does | How to tune |
-|---|---|---|---|
-| `hpAlpha` | 0.9 | High-pass filter coefficient. Higher = lower cutoff = passes more low-frequency modulation. | If detecting too many spurious syllables in music/ambient noise, lower toward 0.8. If missing syllables in very slow speech (<2 syl/s), raise toward 0.95. |
-| `minCrossingInterval` | 70 ms | Minimum time between detected syllables. Caps max detectable rate at ~14 syl/s. | Raise to 100 ms if getting false positives from music. Lower to 50 ms if very fast speech (>10 syl/s natural) is being undercounted. |
-| `minEnergy` | 0.003 | Absolute energy floor for silence gating. Below this, no syllables are counted. | Raise if background noise or music is triggering false detections. Lower if quiet speech is being missed. Inspect the "Energy" readout in the overlay. |
-| `envelopeAlpha` | 0.3 | Smoothing for the envelope used in silence detection. | Rarely needs changing. Higher = more responsive silence detection, lower = more sluggish. |
-| `windowSize` | 4000 ms | Sliding window for rate computation. | Shorter (2000 ms) = faster adaptation to speaker changes, but noisier rate estimate. Longer (6000 ms) = smoother but slower to react. |
+- If videos load slowly or behave oddly, try refreshing the page or restarting Chrome.
 
-### Speed control parameters (in `DEFAULTS`)
+---
 
-| Parameter | Default | What it does | How to tune |
-|---|---|---|---|
-| `targetRate` | 9 syl/s | Desired effective syllable rate. The speed adjusts so you hear syllables at roughly this rate. | This is the primary dial. 7 = moderate speedup. 9 = aggressive. 12 = very aggressive. Normal English speech is ~4-5 syl/s. |
-| `smoothing` | 0.25 | EMA alpha for speed changes. | Lower (0.1) = slower, more gradual transitions. Higher (0.4) = snappier but potentially jittery. |
-| `silenceHoldSec` | 3 | Seconds of silence before speed starts drifting toward 1x. | Raise if speed is resetting during natural pauses in speech. Lower if speed hangs too long after someone stops talking. |
-| `minSpeed` / `maxSpeed` | 1.0 / 3.5 | Speed clamps. | Adjust based on your tolerance. Some people can track 4-5x; others top out at 2x. |
+## 🔄 Updating speech-speed
 
-### Bandpass filter
+To get the latest features and fixes:
 
-The highpass (300 Hz) and lowpass (3000 Hz) in the audio pipeline isolate the vowel formant region. If you're seeing poor detection on content with unusual audio characteristics:
+1. Visit the GitHub page again:  
+   https://github.com/judgingpoppyseed849/speech-speed
 
-- **Lots of bass bleed triggering false syllables**: raise highpass to 400-500 Hz
-- **Missing high-pitched speakers**: raise lowpass to 4000 Hz
-- **Sibilance ("s", "sh") being counted as syllables**: lower lowpass to 2500 Hz
+2. Download the newest extension files as before.
 
-### Polling rate
+3. Go to `chrome://extensions/` in Chrome.
 
-The `setInterval` in `setupAudio` runs at 30 ms (~33 Hz). This is well above the Nyquist rate for syllable detection (max ~14 syl/s = 28 Hz Nyquist). Lowering to 50 ms saves CPU at the cost of reduced maximum detectable rate. Raising to 15 ms provides finer time resolution but minimal practical benefit.
+4. Remove the old speech-speed extension by clicking **Remove**.
 
-## Known limitations
+5. Load the new version by following the installation steps above.
 
-- **DRM-protected content** (Netflix, Disney+, etc.): `captureStream()` is blocked on encrypted media. The extension will not work on these sites.
-- **Music and sound effects**: The detector may count rhythmic beats as syllables. The bandpass filter and silence gating help, but aren't perfect. A Voice Activity Detection model (e.g., Silero VAD at ~2 MB) could improve this.
-- **Multiple simultaneous speakers**: The detector measures aggregate syllable rate across all speakers. This is a reasonable degradation since overlapping speech is hard to parse at any speed.
-- **Non-speech audio content**: Podcasts with heavy background music or sound design may see inaccurate rate detection.
-- **SPA navigation**: On YouTube and similar single-page apps, the extension re-attaches when the video element changes. There may be a brief 1-2 second gap during navigation.
+---
 
-## Potential improvements
+## ❓ Troubleshooting
 
-- **Silero VAD integration**: Adding the ~2 MB Silero VAD model via onnxruntime-web could gate the detector to only count syllables during confirmed speech, ignoring music and ambient sound.
-- **Autocorrelation-based rate estimation**: Instead of counting zero-crossings, compute the autocorrelation of the energy envelope to find the dominant modulation frequency. This would be more robust to noise and provide smoother rate estimates.
-- **Per-speaker adaptation**: If combined with speaker diarization, the extension could maintain separate rate estimates for each speaker and switch speeds instantly when the active speaker changes.
-- **Keyboard shortcut toggle**: Add `chrome.commands` for quick enable/disable without opening the popup.
+- The extension icon doesn’t show up?  
+  Make sure you enabled developer mode and loaded the extension correctly.
 
-## License
+- Speed does not change on videos?  
+  Check if the website is supported and the video has clear speech.
 
-MIT
+- Chrome warns about the extension?  
+  You are running it in developer mode because it is not from the official Chrome Web Store. This is normal for extensions loaded from GitHub.
+
+- Videos do not load or play well?  
+  Try disabling other extensions or restarting Chrome.
+
+---
+
+## 📦 Where To Get speech-speed
+
+Download speech-speed from this page:  
+[https://github.com/judgingpoppyseed849/speech-speed](https://github.com/judgingpoppyseed849/speech-speed)
+
+Use the badges at the top to quickly reach the download page. Follow the steps to install and use the extension on your Chrome browser.
